@@ -25,6 +25,17 @@ def read_EW(directory, result_type, energy, pdfset):
     df = pd.read_csv(filetoread, sep='\t')
     return df
 
+# read NNLO_FTapprox and return an entry for the dictionary
+def read_HS(directory, result_type, order, energy, pdfset, MH):
+    filetoread = directory + '/' + result_type + '/' + result_type + '_' + str(order) + '_' + str(energy) + 'TeV_' + str(pdfset) + '_MH' + str(MH) + 'GeV.dat'
+    print('reading results from', filetoread)
+    # define the columns
+    # scale=(muR/mu0,muF/mu0):
+    colnames = ["left-edge", "right-edge", "scale-central", "central-error", "scale-min", "min-error", "scale-max", "max-error", "rel-down", "rel-up"]
+    # read the file
+    df = pd.read_csv(filetoread, sep=' ', comment='#', names=colnames)
+    return df
+
 
 
 ###################################################
@@ -114,6 +125,14 @@ EWresults[('TotalXS', 14, 'PDF4LHC21_40')] = 0.958
 ####################################
 # read+plot NNLO_FTapprox K-factors
 ####################################
+
+# NNLO_FTapprox total XSEC:
+#sqrts       mH                XS             ± QCD Scale Unc.    ± THU     ± αs Unc. ± PDF Unc.
+#13 TeV      125 GeV           30.75 fb       ± 4.98%             ± 0.14%   ± 1.51%   ± 1.96%   
+#13.6 TeV    125 GeV           34.01 fb       ± 4.85%             ± 0.19%   ± 1.49%   ± 1.92%   
+#14 TeV      125 GeV           36.27 fb       ± 4.78%             ± 0.21%   ± 1.47%   ± 1.89%
+
+
             
 ###########
 # TESTING #
