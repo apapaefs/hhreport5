@@ -68,6 +68,9 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.legend()
         ax.minorticks_on()
 
+        ax.grid(True, which='major', alpha=0.3)
+        ax.grid(True, which='minor', alpha=0.15)
+
         # Hide x tick labels/marks on the main (top) panel
         ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 
@@ -88,6 +91,8 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax_ratio.set_ylabel(r"$K$", fontsize=10)
         ax_ratio.set_xticks(x)
         ax_ratio.set_xticklabels(scale_cols, rotation=45, ha="right")
+        ax_ratio.grid(True, which='major', alpha=0.3)
+        ax_ratio.grid(True, which='minor', alpha=0.15)
         ymin, ymax = np.min(yvals), np.max(yvals)
         if ymin == ymax:
             ymin *= 0.9
@@ -170,6 +175,10 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.legend()
         ax.minorticks_on()
 
+        
+        ax.grid(True, which='major', alpha=0.3)
+        ax.grid(True, which='minor', alpha=0.15)
+        
         # Hide x tick labels/marks on the main (top) panel
         ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 
@@ -198,7 +207,8 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
         ax_ratio.set_ylabel(r"$K$(N3LON3LL/NNLO)", fontsize=10)
         ax_ratio.set_xlim(bin_low[0], max_x)
-
+        ax_ratio.grid(True, which='major', alpha=0.3)
+        ax_ratio.grid(True, which='minor', alpha=0.15)
         ymin, ymax = np.min(yvals), np.max(yvals)
         if ymin == ymax:
             ymin *= 0.9

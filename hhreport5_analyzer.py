@@ -23,7 +23,7 @@ def read_HS(directory, result_type, order, energy, pdfset, MH):
 # read+plot Hua-Sheng's N3LO+NLL and NNLO results:
 ###################################################
 HSresults = {} # dictionary to hold the cross section
-HSresults_directory = 'Data4YR5' # directory for Hua-Sheng's results
+HSresults_directory = 'N3LO' # directory for Hua-Sheng's results
 HStypes = ['TotalXS', 'Mhh']
 HSorders = ['NNLO', 'N3LON3LL', 'N3LO']
 HSpdfsets = ['PDF4LHC21_40', 'MSHT20xNNPDF40_aN3LO_qed', 'MSHT20xNNPDF40_NNLO_qed']
