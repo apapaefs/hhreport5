@@ -6,7 +6,6 @@ from hhreport5_plotting import *
 ##############################################
 # functions
 ##############################################
-
 # read Hua-Sheng's results and return an entry for the dictionary
 def read_HS(directory, result_type, order, energy, pdfset, MH):
     filetoread = directory + '/' + result_type + '/' + result_type + '_' + str(order) + '_' + str(energy) + 'TeV_' + str(pdfset) + '_MH' + str(MH) + 'GeV.dat'
@@ -17,6 +16,15 @@ def read_HS(directory, result_type, order, energy, pdfset, MH):
     # read the file
     df = pd.read_csv(filetoread, sep=' ', comment='#', names=colnames)
     return df
+
+# read EW K-factors and return an entry for the dictionary
+def read_EW(directory, result_type, energy, pdfset):
+    filetoread = directory + '/' + result_type +  '_kfac-' + str(pdfset) + '-' + str(energy) + 'TeV_muf=mur=0.5Mhh.dat'
+    print('reading EW results from', filetoread)
+    # read the file
+    df = pd.read_csv(filetoread, sep='\t')
+    return df
+
 
 
 ###################################################
@@ -81,15 +89,47 @@ for result_type in HStypes:
             result = pd.concat([first_two, divided], axis=1)
             Delta3PDF[(result_type, energy, MH)]= result
 
+            
+############################
+# read+plot NLO EW K-factors
+############################
+EWresults = {} # dictionary to hold the cross section
+EWresults_directory = 'EW' # directory for Hua-Sheng's results
+EWtypes = ['pth', 'Mhh']
+EWpdfset = 'PDF4LHC'
+EWenergies = [13.6, 13, 14]
+           
+#Mhh_kfac-PDF4LHC-13.6TeV_muf=mur=0.5Mhh.dat
+for result_type in EWtypes:
+        for energy in EWenergies:
+            data = read_EW(EWresults_directory, result_type, energy, EWpdfset)
+            EWresults[(result_type, energy, 'PDF4LHC21_40')] = data
+
+# EW total XSEC (the name conforms with the N3LO PDF to simplify plotting)
+EWresults[('TotalXS', 13, 'PDF4LHC21_40')] = 0.959
+EWresults[('TotalXS', 13.6, 'PDF4LHC21_40')] = 0.959
+EWresults[('TotalXS', 14, 'PDF4LHC21_40')] = 0.958
+
+
+####################################
+# read+plot NNLO_FTapprox K-factors
+####################################
+            
 ###########
 # TESTING #
 ###########
-# print K-factors
+
+# N3LO TESTING ONLY:
+# print N3LO/NNLO K-factors
 print('TotalXS N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('TotalXS', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
 #print('Mhh N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('Mhh', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
 
-# print Delta3PDF
+# print Delta3PDF (Error due to not using N3LO PDFs)
 print('Delta3PDF (1.,1.) @ 14 TeV=', Delta3PDF[('TotalXS', 14, 125)]['(1.,1.)'].to_string(index=False))
 
-# test plots: 
+# test plots (N3LO): 
 plot_HS(HSresults, K3N3LL2, 'Mhh', 13.6, 'PDF4LHC21_40', 125, envelope=True, points=True)
+
+# EW+N3LO TESTING (EW k-factor in the lower panel)
+plot_HS_EW(HSresults, EWresults, K3N3LL2, 'Mhh', 13.6, 'PDF4LHC21_40', 125, envelope=True, points=True)
+
