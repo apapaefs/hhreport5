@@ -8,21 +8,55 @@ from hhreport5_plotting import *
 ##############################################
 # read Hua-Sheng's results and return an entry for the dictionary
 def read_HS(directory, result_type, order, energy, pdfset, MH):
-    filetoread = directory + '/' + result_type + '/' + result_type + '_' + str(order) + '_' + str(energy) + 'TeV_' + str(pdfset) + '_MH' + str(MH) + 'GeV.dat'
-    print('reading results from', filetoread)
-    # define the columns
-    # scale=(muR/mu0,muF/mu0):
-    colnames = ["(1.,1.)", "(2.,1.)", "(0.5,1.)", "(1.,2.)", "(2.,2.)", "(1.,0.5)", "(0.5,0.5)"]
-    # read the file
-    df = pd.read_csv(filetoread, sep=' ', comment='#', names=colnames)
+    filetoread = (
+        f"{directory}/{result_type}/"
+        f"{result_type}_{order}_{energy}TeV_{pdfset}_MH{MH}GeV.dat"
+    )
+    print("reading results from", filetoread)
+
+    scale_cols = ["(1.,1.)", "(2.,1.)", "(0.5,1.)", "(1.,2.)",
+                  "(2.,2.)", "(1.,0.5)", "(0.5,0.5)"]
+
+    # Mhh (and typically pth) have two leading bin-edge columns
+    if result_type in ["Mhh", "pth"]:
+        colnames = ["left-edge", "right-edge"] + scale_cols
+    else:
+        colnames = scale_cols
+
+    df = pd.read_csv(
+        filetoread,
+        comment="#",
+        sep=r"\s+",
+        engine="python",
+        names=colnames,
+        header=None
+    )
+
+    # Force numeric
+    for c in colnames:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
     return df
 
-# read EW K-factors and return an entry for the dictionary
 def read_EW(directory, result_type, energy, pdfset):
-    filetoread = directory + '/' + result_type +  '_kfac-' + str(pdfset) + '-' + str(energy) + 'TeV_muf=mur=0.5Mhh.dat'
-    print('reading EW results from', filetoread)
-    # read the file
-    df = pd.read_csv(filetoread, sep='\t')
+    filetoread = (
+        f"{directory}/{result_type}"
+        f"_kfac-{pdfset}-{energy}TeV_muf=mur=0.5Mhh.dat"
+    )
+    print("reading EW results from", filetoread)
+
+    df = pd.read_csv(
+        filetoread,
+        sep=r"\s+",
+        engine="python",
+        header=None,
+        names=["left-edge", "K_EW"]
+    )
+
+    df["left-edge"] = pd.to_numeric(df["left-edge"], errors="coerce")
+    df["K_EW"]      = pd.to_numeric(df["K_EW"], errors="coerce")
+    df = df.dropna(subset=["left-edge", "K_EW"]).reset_index(drop=True)
+
     return df
 
 def read_NNLO_FTapprox(directory, result_type, order, energy):
@@ -54,6 +88,67 @@ def read_NNLO_FTapprox(directory, result_type, order, energy):
         )
 
     return df
+
+import pandas as pd
+
+
+# find the min and max of the N3LO K-factors:
+def minmax_k3n3ll2_scales(K3N3LL2, key, colnames):
+    """
+    Compute min/max of K3N3LL2[key] over the provided scale-variation columns.
+
+    Parameters
+    ----------
+    K3N3LL2 : dict-like
+        Dictionary holding ratio DataFrames.
+    key : tuple
+        Example: ('TotalXS', 13, 'PDF4LHC21_40', 125)
+    colnames : list[str]
+        Scale-variation column names to consider.
+
+    Returns
+    -------
+    results : dict
+        {
+          "min_per_col": pd.Series,
+          "max_per_col": pd.Series,
+          "global_min": float,
+          "global_min_col": str,
+          "global_max": float,
+          "global_max_col": str,
+          "used_cols": list[str],
+        }
+    """
+    if key not in K3N3LL2:
+        raise KeyError(f"Key {key} not found in K3N3LL2")
+
+    df = K3N3LL2[key]
+    used_cols = [c for c in colnames if c in df.columns]
+    if not used_cols:
+        raise KeyError(
+            f"None of the requested columns found for key={key}. "
+            f"Requested={colnames}, available={list(df.columns)}"
+        )
+
+    sub = df[used_cols].apply(pd.to_numeric, errors="coerce")
+
+    min_per_col = sub.min(axis=0, skipna=True)
+    max_per_col = sub.max(axis=0, skipna=True)
+
+    global_min = float(min_per_col.min())
+    global_max = float(max_per_col.max())
+    global_min_col = str(min_per_col.idxmin())
+    global_max_col = str(max_per_col.idxmax())
+
+    return {
+        "min_per_col": min_per_col,
+        "max_per_col": max_per_col,
+        "global_min": global_min,
+        "global_min_col": global_min_col,
+        "global_max": global_max,
+        "global_max_col": global_max_col,
+        "used_cols": used_cols,
+    }
 
 
 ###################################################
@@ -179,11 +274,35 @@ print('\nTESTING:')
 # N3LO TESTING ONLY:
 #####################
 
+# get N3LO+N3LL K-factors and uncertainties:
+print("N3LO+N3LL K-factors and uncertainties:")
+colnames = ["(1.,1.)", "(2.,1.)", "(0.5,1.)", "(1.,2.)", "(2.,2.)", "(1.,0.5)", "(0.5,0.5)"]
+key = ('TotalXS', 13, 'PDF4LHC21_40', 125)
+K13 = np.float64(K3N3LL2[key]['(1.,1.)'].to_string(index=False))
+res13 = minmax_k3n3ll2_scales(K3N3LL2, key, colnames)
+key = ('TotalXS', 13.6, 'PDF4LHC21_40', 125)
+K136 = np.float64(K3N3LL2[key]['(1.,1.)'].to_string(index=False))
+res136 = minmax_k3n3ll2_scales(K3N3LL2, key, colnames)
+key = ('TotalXS', 14, 'PDF4LHC21_40', 125)
+K14 = np.float64(K3N3LL2[key]['(1.,1.)'].to_string(index=False))
+res14 = minmax_k3n3ll2_scales(K3N3LL2, key, colnames)
+
+print("\tK(13) =", K13, "+-", res13["global_max"]-K13, K13 - res13["global_min"])
+print("\tK(13.6) =", K136, "+-", res136["global_max"]-K136, K136 - res136["global_min"])
+print("\tK(14) =", K14, "+-", res14["global_max"]-K14, K14 - res14["global_min"])
+
+
 # print N3LO/NNLO K-factors
-print('TotalXS N3LO+N3LL/NNLO K-Fctor (1.,1.) @ 13.6 TeV=', K3N3LL2[('TotalXS', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
+#print('TotalXS N3LO+N3LL/NNLO K-Factor (1.,1.) @ 13 TeV=', K3N3LL2[('TotalXS', 13, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
+#print('TotalXS N3LO+N3LL/NNLO K-Factor (1.,1.) @ 13.6 TeV=', K3N3LL2[('TotalXS', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
+#print('TotalXS N3LO+N3LL/NNLO K-Factor (1.,1.) @ 14 TeV=', K3N3LL2[('TotalXS', 14, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
 #print('Mhh N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('Mhh', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
-# print Delta3PDF (Error due to not using N3LO PDFs)
+
+# print Delta3PDF (Error due to not using N3LO PDFs) -> FOR NOW THE APPROXIMATE PDF IS ONLY AVAILABLE AT 14 TeV
+#print('Delta3PDF (1.,1.) @ 13 TeV=', Delta3PDF[('TotalXS', 13, 125)]['(1.,1.)'].to_string(index=False))
+#print('Delta3PDF (1.,1.) @ 13.6 TeV=', Delta3PDF[('TotalXS', 13.6, 125)]['(1.,1.)'].to_string(index=False))
 print('Delta3PDF (1.,1.) @ 14 TeV=', Delta3PDF[('TotalXS', 14, 125)]['(1.,1.)'].to_string(index=False))
+
 # test plots (N3LO): 
 plot_HS(HSresults, K3N3LL2, 'Mhh', 13.6, 'PDF4LHC21_40', 125, envelope=True, points=True)
 
@@ -211,7 +330,25 @@ plot_NNLOFTapprox(NNLO_FTapprox_results, 'Mhh', 'NNLO', 13.6)
 # TEST COMBINATIONS #
 #####################
 
+# Plot individually (Mhh)
 plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                             'Mhh', 13.6, 'PDF4LHC21_40', 125,
                             envelope=True, points=True,
                             ft_order="NNLO")
+
+# Plot the combination
+plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
+                            'Mhh', 13, 'PDF4LHC21_40', 125,
+                            envelope=True, points=True,
+                            ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True)
+
+plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
+                            'Mhh', 13.6, 'PDF4LHC21_40', 125,
+                            envelope=True, points=True,
+                            ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True)
+
+
+plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
+                            'Mhh', 14, 'PDF4LHC21_40', 125,
+                            envelope=True, points=True,
+                            ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True)

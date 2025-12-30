@@ -864,3 +864,336 @@ def plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2
     fig.tight_layout()
     fig.savefig('plots/' + f"HS_EW_FTapprox_{result_type}_{energy}TeV_{pdfset}_mH{MH}.pdf")
     return fig
+
+
+# plot COMBINATION
+# envelope: whether to include an envelope
+# points: whether to plot the actual points
+def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
+                     result_type, energy, pdfset, MH,
+                     envelope=True, points=True,
+                     ft_order="NNLO",
+                     include_N3LON3LL=False,
+                     include_unrescaled_FTapprox=False,
+                     include_kfactor_combo=True,
+                         xmin=None, xmax=None, ylog=True):
+    """
+    - Main panel (Mhh):
+        * default: FTapprox * K3 * K_EW (with FTapprox scale envelope propagated)
+        * optionally unrescaled FTapprox (flag)
+        * optionally HS N3LON3LL (flag)
+        * NEVER plot HS NNLO
+    - Lower panel:
+        * plot K3 (central only), K_EW (central only), and optionally K3*K_EW (central only)
+        * NO K3 scale envelope in lower panel
+        * call K_QCD "K3" everywhere
+    """
+
+    colnames = ["(1.,1.)", "(2.,1.)", "(0.5,1.)",
+                "(1.,2.)", "(2.,2.)", "(1.,0.5)", "(0.5,0.5)"]
+    central_col = "(1.,1.)"
+
+    # --- Grab HS XS (needed for K3 and optional N3LON3LL curve) ---
+    df3 = HSresults[(result_type, 'N3LON3LL', energy, pdfset, MH)]
+    df2 = HSresults[(result_type, 'NNLO',     energy, pdfset, MH)]  # not plotted
+    kdf = K3N3LL2[(result_type, energy, pdfset, MH)]                # may be used for checks
+
+    # --- Grab FTapprox ---
+    ft_key = (result_type, ft_order, energy)
+    if ft_key not in NNLO_FTapprox_results:
+        raise KeyError(f"Key {ft_key} not found in NNLO_FTapprox_results")
+    df_ft = NNLO_FTapprox_results[ft_key].copy()
+    for c in ["left-edge", "right-edge", "scale-central", "scale-min", "scale-max"]:
+        df_ft[c] = pd.to_numeric(df_ft[c], errors="coerce")
+
+    # ---- Helper: fetch EW object with common key conventions ----
+    def _get_ew_obj():
+        if EWresults is None:
+            return None
+        candidate_keys = [
+            (result_type, energy, pdfset, MH),
+            ('EW', result_type, energy, pdfset, MH),
+            (result_type, 'EW', energy, pdfset, MH),
+            (result_type, 'EW', energy, pdfset),
+            (result_type, energy, pdfset),
+        ]
+        for kk in candidate_keys:
+            try:
+                return EWresults[kk]
+            except Exception:
+                pass
+        return None
+
+    # ---- Helper: parse EW into (left_edges, values) or scalar ----
+    def _parse_ew_leftedge(obj):
+        """
+        Accepts:
+          - scalar (float/int): constant K_EW
+          - DataFrame: either index=left-edge with one column, or two columns [left-edge, K]
+          - array-like Nx2: [left-edge, K]
+        Returns:
+          (left_edges, values, scalar_flag)
+        """
+        if obj is None:
+            return None, None, False
+
+        if isinstance(obj, (float, int, np.floating, np.integer)):
+            return None, float(obj), True
+
+        if isinstance(obj, pd.DataFrame):
+            if obj.shape[1] == 1:
+                left_edges = np.asarray(obj.index.to_numpy(), dtype=float)
+                vals = np.asarray(obj.iloc[:, 0].to_numpy(), dtype=float)
+                return left_edges, vals, False
+            else:
+                cols = list(obj.columns)
+                # pick first "mass-like" and first "k-like" if possible
+                mass_like = [c for c in cols if str(c).lower() in ["m", "mhh", "mh", "bin_low", "low", "left", "edge", "mass"]]
+                k_like = [c for c in cols if "k" in str(c).lower()]
+                mcol = mass_like[0] if len(mass_like) else cols[0]
+                kcol = k_like[0] if len(k_like) else cols[1]
+                left_edges = np.asarray(obj[mcol].to_numpy(), dtype=float)
+                vals = np.asarray(obj[kcol].to_numpy(), dtype=float)
+                return left_edges, vals, False
+
+        arr = np.asarray(obj, dtype=float)
+        if arr.ndim == 2 and arr.shape[1] >= 2:
+            left_edges = arr[:, 0].astype(float)
+            vals = arr[:, 1].astype(float)
+            return left_edges, vals, False
+
+        return None, None, False
+
+    # ---- Helper: exact bin-left mapping (no interpolation; avoids 1-bin shifts) ----
+    def _map_by_left_edges(target_lefts, src_lefts, src_vals, last_extend_value=None):
+        """
+        Build per-bin array y[i] for each target_lefts[i] by exact lookup in src_lefts.
+        If a target left edge is missing:
+          - if it's >= max(src_lefts) and last_extend_value is provided, use that (for the last open bin)
+          - else set NaN
+        """
+        target_lefts = np.asarray(target_lefts, dtype=float)
+
+        if src_lefts is None and np.isscalar(src_vals):
+            return np.full_like(target_lefts, float(src_vals), dtype=float)
+
+        src_lefts = np.asarray(src_lefts, dtype=float)
+        src_vals = np.asarray(src_vals, dtype=float)
+        order = np.argsort(src_lefts)
+        src_lefts = src_lefts[order]
+        src_vals = src_vals[order]
+
+        m = {float(le): float(v) for le, v in zip(src_lefts, src_vals)}
+        max_le = float(np.max(src_lefts)) if len(src_lefts) else -np.inf
+
+        out = np.empty_like(target_lefts, dtype=float)
+        out.fill(np.nan)
+        for i, le in enumerate(target_lefts):
+            key = float(le)
+            if key in m:
+                out[i] = m[key]
+            else:
+                if last_extend_value is not None and key >= max_le:
+                    out[i] = float(last_extend_value)
+                else:
+                    out[i] = np.nan
+        return out
+
+    # ---- Helper: plot binned values with true edges (no visual shifting) ----
+    def _step_post(ax, edges, vals, **kwargs):
+        """
+        edges length N+1, vals length N.
+        """
+        edges = np.asarray(edges, dtype=float)
+        vals = np.asarray(vals, dtype=float)
+        if len(edges) != len(vals) + 1:
+            raise ValueError("edges must have length len(vals)+1")
+        ax.step(edges, np.r_[vals, vals[-1]], where="post", **kwargs)
+
+    # Figure with 2 merged panels
+    fig, (ax, ax_ratio) = plt.subplots(
+        2, 1,
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1]},
+        figsize=(7, 6)
+    )
+
+    # Only Mhh implemented here (matches your use case)
+    if result_type != "Mhh":
+        raise NotImplementedError("This plotting prescription is implemented for result_type == 'Mhh'.")
+
+    # ---- HS bin edges ----
+    if isinstance(df3.index, pd.MultiIndex) and df3.index.nlevels == 2:
+        bin_low  = df3.index.get_level_values(0).to_numpy(dtype=float)
+        bin_high = df3.index.get_level_values(1).to_numpy(dtype=float)
+    else:
+        bin_low  = df3.iloc[:, 0].to_numpy(dtype=float)
+        bin_high = df3.iloc[:, 1].to_numpy(dtype=float)
+
+    hs_edges = np.r_[bin_low, bin_high[-1]]
+    bin_width = bin_high - bin_low
+
+    # HS scale columns
+    scale_cols3 = [c for c in colnames if c in df3.columns]
+    scale_cols2 = [c for c in colnames if c in df2.columns]
+    df3_scales = df3[scale_cols3]
+    df2_scales = df2[scale_cols2]
+
+    if central_col not in df3_scales.columns or central_col not in df2_scales.columns:
+        raise ValueError(f"Central column {central_col!r} not found in HS DataFrames")
+
+    # Optional HS N3LON3LL curve in main panel (per GeV)
+    df3_scales_dw = df3_scales.div(bin_width, axis=0)
+    y3 = df3_scales_dw[central_col].to_numpy(dtype=float)
+
+    # K3 central per HS bin (this is what you want in the lower panel)
+    ratio_df = df3_scales / df2_scales
+    k3_central = ratio_df[central_col].to_numpy(dtype=float)
+
+    # ---- FTapprox bins ----
+    ft_bin_low  = df_ft["left-edge"].to_numpy(dtype=float)
+    ft_bin_high = df_ft["right-edge"].to_numpy(dtype=float)
+    ft_edges    = np.r_[ft_bin_low, ft_bin_high[-1]]
+
+    ft_c   = df_ft["scale-central"].to_numpy(dtype=float)
+    ft_min = df_ft["scale-min"].to_numpy(dtype=float)
+    ft_max = df_ft["scale-max"].to_numpy(dtype=float)
+
+    # ---- EW K-factor: interpret your list as (left-edge -> value for that bin), last extends to end ----
+    ew_obj = _get_ew_obj()
+    ew_left, ew_vals_or_scalar, is_scalar = _parse_ew_leftedge(ew_obj)
+
+    if ew_obj is None:
+        kew_on_hs = np.full_like(bin_low, np.nan, dtype=float)
+        kew_on_ft = np.full_like(ft_bin_low, np.nan, dtype=float)
+    else:
+        if is_scalar:
+            kew_on_hs = np.full_like(bin_low, float(ew_vals_or_scalar), dtype=float)
+            kew_on_ft = np.full_like(ft_bin_low, float(ew_vals_or_scalar), dtype=float)
+        else:
+            # Last value should apply from its left-edge (1500) to the end
+            last_extend = float(ew_vals_or_scalar[-1])
+            kew_on_hs = _map_by_left_edges(bin_low, ew_left, ew_vals_or_scalar, last_extend_value=last_extend)
+            kew_on_ft = _map_by_left_edges(ft_bin_low, ew_left, ew_vals_or_scalar, last_extend_value=last_extend)
+
+            # Strong sanity check: if bins are supposed to match, no NaNs should appear up to 1500
+            if np.any(~np.isfinite(kew_on_hs[:min(len(kew_on_hs), len(ew_left))])):
+                bad = bin_low[~np.isfinite(kew_on_hs)]
+                print("[plot_combination] WARNING: Missing K_EW for some HS bin left-edges (first few):", bad[:10])
+
+    # ---- Map K3 to FT bins by exact left-edge matching too (avoids any half-bin shift) ----
+    # K3 is defined on HS bins; last bin (1500) should extend to end automatically if FT shares the same last-left-edge.
+    last_k3 = float(k3_central[-1])
+    k3_on_ft = _map_by_left_edges(ft_bin_low, bin_low, k3_central, last_extend_value=last_k3)
+
+    # ---- Rescaled FTapprox ----
+    ft_c_res   = ft_c   * k3_on_ft * kew_on_ft
+    ft_min_res = ft_min * k3_on_ft * kew_on_ft
+    ft_max_res = ft_max * k3_on_ft * kew_on_ft
+
+    # ================= MAIN PANEL =================
+
+    if points:
+        if include_N3LON3LL:
+            _step_post(ax, hs_edges, y3, color="C0", linewidth=1.8, label="N3LON3LL (1,1)")
+
+ 
+        validc = np.isfinite(ft_c_res)
+        if np.any(validc):
+            _step_post(ax, ft_edges, ft_c_res, color="red", linewidth=1.8,
+                       label=rf"{ft_order} FTapprox $\times\,K_3\times K_{{\rm EW}}$")
+
+    if envelope:
+        if include_N3LON3LL:
+            y3_min = df3_scales_dw.min(axis=1).to_numpy(dtype=float)
+            y3_max = df3_scales_dw.max(axis=1).to_numpy(dtype=float)
+            ax.fill_between(hs_edges, np.r_[y3_min, y3_min[-1]], np.r_[y3_max, y3_max[-1]],
+                            step="post", alpha=0.20, color="C0", label="N3LON3LL scale vars")
+        # Rescaled FTapprox envelope (default)
+        valid = np.isfinite(ft_min_res) & np.isfinite(ft_max_res)
+        if np.any(valid):
+            ax.fill_between(ft_edges, np.r_[ft_min_res, ft_min_res[-1]], np.r_[ft_max_res, ft_max_res[-1]],
+                            step="post", alpha=0.20, color="red",
+                            label=rf"{ft_order} FTapprox $\times\,K_3\times K_{{\rm EW}}$ (scale vars)")
+
+            
+    if points:
+        if include_unrescaled_FTapprox:
+            _step_post(ax, ft_edges, ft_c, color="red", linestyle="--", linewidth=1.4,
+                       label=f"{ft_order} FTapprox (unrescaled)")
+
+
+        #if include_unrescaled_FTapprox:
+        #    ax.fill_between(ft_edges, np.r_[ft_min, ft_min[-1]], np.r_[ft_max, ft_max[-1]],
+        #                    step="post", alpha=0.12, color="red",
+        #                    label=f"{ft_order} FTapprox scale vars (unrescaled)")
+
+     
+    if ylog is True:
+        ax.set_yscale("log")
+    
+    ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
+    ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_H = {MH}$ GeV")
+    ax.legend()
+    ax.minorticks_on()
+    ax.grid(True, which='major', alpha=0.3)
+    ax.grid(True, which='minor', alpha=0.15)
+    ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+
+    max_x = min(2000.0, float(bin_high[-1]))
+    ax.set_xlim(float(bin_low[0]), max_x)
+    ax.set_ylim(1e-5)
+    
+
+    # ================= LOWER PANEL =================
+    # No scale envelopes here (per your request). Use true bin edges, post-steps.
+    _step_post(ax_ratio, hs_edges, k3_central, color="k", linewidth=1.6,
+               label=r"$K_{3}=\mathrm{N3LON3LL}/\mathrm{NNLO}$")
+
+    if np.any(np.isfinite(kew_on_hs)):
+        _step_post(ax_ratio, hs_edges, kew_on_hs, color="C3", linestyle="--", linewidth=1.5,
+                   label=r"$K_{\mathrm{EW}}$")
+
+    if include_kfactor_combo and np.any(np.isfinite(kew_on_hs)):
+        combo = k3_central * kew_on_hs
+        _step_post(ax_ratio, hs_edges, combo, color="C4", linewidth=1.5,
+                   label=r"$K_{3}\times K_{\mathrm{EW}}$")
+
+    ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+    ax_ratio.set_ylabel(r"$K$", fontsize=10)
+
+
+    default_xmin = float(bin_low[0])
+    default_xmax = min(2000.0, float(bin_high[-1]))
+
+    xlo = default_xmin if xmin is None else float(xmin)
+    xhi = default_xmax if xmax is None else float(xmax)
+
+    ax.set_xlim(xlo, xhi)
+    ax_ratio.set_xlim(xlo, xhi)
+    
+    ax_ratio.grid(True, which='major', alpha=0.3)
+    ax_ratio.grid(True, which='minor', alpha=0.15)
+    ax_ratio.minorticks_on()
+    ax_ratio.axhline(1.0, color="k", linestyle="--", linewidth=1, alpha=0.5)
+    ax_ratio.legend()
+
+    # Reasonable auto y-limits
+    ypool = [k3_central[np.isfinite(k3_central)]]
+    if np.any(np.isfinite(kew_on_hs)):
+        ypool.append(kew_on_hs[np.isfinite(kew_on_hs)])
+    if include_kfactor_combo and np.any(np.isfinite(kew_on_hs)):
+        ypool.append((k3_central * kew_on_hs)[np.isfinite(k3_central * kew_on_hs)])
+    ypool = np.concatenate(ypool) if len(ypool) else np.array([1.0])
+    ymin, ymax = np.nanmin(ypool), np.nanmax(ypool)
+    if ymin == ymax:
+        ymin *= 0.9
+        ymax *= 1.1
+    ax_ratio.set_ylim(0.9 * ymin, 1.1 * ymax)
+
+    #plt.subplots_adjust(hspace=0.0)
+    #fig.tight_layout()
+    fig.subplots_adjust(hspace=0.02)  # try 0.00–0.05
+    fig.tight_layout(pad=0.2)         # small pad; keeps things snug
+    fig.savefig('plots/' + f"COMBINATION_{result_type}_{energy}TeV_{pdfset}_mH{MH}.pdf")
+    return fig
