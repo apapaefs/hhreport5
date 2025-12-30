@@ -25,17 +25,35 @@ def read_EW(directory, result_type, energy, pdfset):
     df = pd.read_csv(filetoread, sep='\t')
     return df
 
-# read NNLO_FTapprox and return an entry for the dictionary
-def read_HS(directory, result_type, order, energy, pdfset, MH):
-    filetoread = directory + '/' + result_type + '/' + result_type + '_' + str(order) + '_' + str(energy) + 'TeV_' + str(pdfset) + '_MH' + str(MH) + 'GeV.dat'
+def read_NNLO_FTapprox(directory, result_type, order, energy):
+    filetoread = (
+        directory + '/' + 'LHC' + str(energy) + '/'
+        + '1dd.plot.' + str(result_type) + '..' + str(order) + '.QCD.dat'
+    )
     print('reading results from', filetoread)
-    # define the columns
-    # scale=(muR/mu0,muF/mu0):
-    colnames = ["left-edge", "right-edge", "scale-central", "central-error", "scale-min", "min-error", "scale-max", "max-error", "rel-down", "rel-up"]
-    # read the file
-    df = pd.read_csv(filetoread, sep=' ', comment='#', names=colnames)
-    return df
 
+    colnames = ["left-edge", "right-edge", "scale-central", "central-error",
+                "scale-min", "min-error", "scale-max", "max-error",
+                "rel-down", "rel-up"]
+
+    df = pd.read_csv(
+        filetoread,
+        comment="#",
+        sep=r"\s+",          
+        engine="python",     
+        names=colnames,
+        header=None
+    )
+
+    # turn "-6.38%" -> -0.0638 and "3.52%" -> 0.0352
+    for c in ["rel-down", "rel-up"]:
+        df[c] = (
+            df[c].astype(str)
+                 .str.replace("%", "", regex=False)
+                 .astype(float) / 100.0
+        )
+
+    return df
 
 
 ###################################################
@@ -104,7 +122,7 @@ for result_type in HStypes:
 ############################
 # read+plot NLO EW K-factors
 ############################
-EWresults = {} # dictionary to hold the cross section
+EWresults = {} # dictionary to hold the k-factors
 EWresults_directory = 'EW' # directory for Hua-Sheng's results
 EWtypes = ['pth', 'Mhh']
 EWpdfset = 'PDF4LHC'
@@ -125,30 +143,75 @@ EWresults[('TotalXS', 14, 'PDF4LHC21_40')] = 0.958
 ####################################
 # read+plot NNLO_FTapprox K-factors
 ####################################
-
 # NNLO_FTapprox total XSEC:
 #sqrts       mH                XS             ± QCD Scale Unc.    ± THU     ± αs Unc. ± PDF Unc.
 #13 TeV      125 GeV           30.75 fb       ± 4.98%             ± 0.14%   ± 1.51%   ± 1.96%   
 #13.6 TeV    125 GeV           34.01 fb       ± 4.85%             ± 0.19%   ± 1.49%   ± 1.92%   
 #14 TeV      125 GeV           36.27 fb       ± 4.78%             ± 0.21%   ± 1.47%   ± 1.89%
 
+NNLO_FTapprox_results = {} # dictionary to hold NNLO_FTapprox results
+NNLO_FTapprox_results_directory = 'NNLO_FTapprox' # directory for Hua-Sheng's results
+NNLO_FTapprox_types = ['pT_h1', 'm_hh', 'total_rate']
+NNLO_FTapprox_orders = ['NNLO']
+NNLO_FTapprox_energies = [13.6, 13, 14]
+NNLO_FTapprox_types_convert = { 'pT_h1': 'pth', 'm_hh': 'Mhh', 'total_rate': 'TotalXS'} # convert the naming of types to the global one
 
-            
+# test reading
+#dftest = read_NNLO_FTapprox(NNLO_FTapprox_results_directory, 'm_hh', 'NNLO', 13.6)
+#print(dftest)
+
+# read in all the distributions
+for result_type in NNLO_FTapprox_types:
+        for energy in NNLO_FTapprox_energies:
+            for order in NNLO_FTapprox_orders:
+                data = read_NNLO_FTapprox(NNLO_FTapprox_results_directory, result_type, order, energy)
+                NNLO_FTapprox_results[(NNLO_FTapprox_types_convert[result_type], order, energy)] = data
+                print(NNLO_FTapprox_types_convert[result_type], order, energy)
+
+
 ###########
 # TESTING #
 ###########
 
+print('\nTESTING:')
+                
+#####################
 # N3LO TESTING ONLY:
-# print N3LO/NNLO K-factors
-print('TotalXS N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('TotalXS', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
-#print('Mhh N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('Mhh', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
+#####################
 
+# print N3LO/NNLO K-factors
+print('TotalXS N3LO+N3LL/NNLO K-Fctor (1.,1.) @ 13.6 TeV=', K3N3LL2[('TotalXS', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
+#print('Mhh N3LO+N3LL/NNLO (1.,1.) @ 13.6 TeV=', K3N3LL2[('Mhh', 13.6, 'PDF4LHC21_40', 125)]['(1.,1.)'].to_string(index=False))
 # print Delta3PDF (Error due to not using N3LO PDFs)
 print('Delta3PDF (1.,1.) @ 14 TeV=', Delta3PDF[('TotalXS', 14, 125)]['(1.,1.)'].to_string(index=False))
-
 # test plots (N3LO): 
 plot_HS(HSresults, K3N3LL2, 'Mhh', 13.6, 'PDF4LHC21_40', 125, envelope=True, points=True)
 
-# EW+N3LO TESTING (EW k-factor in the lower panel)
+###################
+# EW+N3LO TESTING #
+###################
+
+# print EW K-factor
+print('TotalXS EW K-Factor @ 13.6 TeV =', EWresults[('TotalXS', 13.6, 'PDF4LHC21_40')])
+
+# plot EW+N3LO, as above but with EW k-factor in the lower panel
 plot_HS_EW(HSresults, EWresults, K3N3LL2, 'Mhh', 13.6, 'PDF4LHC21_40', 125, envelope=True, points=True)
 
+#########################
+# NNLO_FTapprox TESTING #
+#########################
+
+# print total cross section K-factor (from FILE):
+print('TotalXS NNLO_FTapprox @ 13.6 TeV (scale central) =', NNLO_FTapprox_results[('TotalXS', 'NNLO', 13.6)]['scale-central'].to_string(index=False))
+# plot NNLO_FTapprox with scale variation envelope
+plot_NNLOFTapprox(NNLO_FTapprox_results, 'Mhh', 'NNLO', 13.6)
+
+
+#####################
+# TEST COMBINATIONS #
+#####################
+
+plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
+                            'Mhh', 13.6, 'PDF4LHC21_40', 125,
+                            envelope=True, points=True,
+                            ft_order="NNLO")
