@@ -245,7 +245,7 @@ EWresults[('TotalXS', 14, 'PDF4LHC21_40')] = 0.958
 #14 TeV      125 GeV           36.27 fb       ± 4.78%             ± 0.21%   ± 1.47%   ± 1.89%
 
 NNLO_FTapprox_results = {} # dictionary to hold NNLO_FTapprox results
-NNLO_FTapprox_results_directory = 'NNLO_FTapprox' # directory for Hua-Sheng's results
+NNLO_FTapprox_results_directory = 'NNLO_FTapprox' # directory for NNLO FT approx results
 NNLO_FTapprox_types = ['pT_h1', 'm_hh', 'total_rate']
 NNLO_FTapprox_orders = ['NNLO']
 NNLO_FTapprox_energies = [13.6, 13, 14]
