@@ -876,7 +876,9 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                      include_N3LON3LL=False,
                      include_unrescaled_FTapprox=False,
                      include_kfactor_combo=True,
-                         xmin=None, xmax=None, ylog=True):
+                     IncludeMTOPScheme=False,
+                     mtop_scheme_dir="mtscheme",
+                     xmin=None, xmax=None, ylog=True):
     """
     - Main panel (Mhh):
         * default: FTapprox * K3 * K_EW (with FTapprox scale envelope propagated)
@@ -887,6 +889,10 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         * plot K3 (central only), K_EW (central only), and optionally K3*K_EW (central only)
         * NO K3 scale envelope in lower panel
         * call K_QCD "K3" everywhere
+    - Optional MTOP-scheme panel:
+        * if IncludeMTOPScheme=True, read mtscheme/mtscheme_<obs>_<energy>_<pdfset>_<MH>.txt
+        * expected columns: left-edge right-edge rel-down rel-up (percent strings accepted)
+        * draw the relative uncertainty band around 1
     """
 
     colnames = ["(1.,1.)", "(2.,1.)", "(0.5,1.)",
@@ -1010,13 +1016,60 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
             raise ValueError("edges must have length len(vals)+1")
         ax.step(edges, np.r_[vals, vals[-1]], where="post", **kwargs)
 
-    # Figure with 2 merged panels
-    fig, (ax, ax_ratio) = plt.subplots(
-        2, 1,
-        sharex=True,
-        gridspec_kw={"height_ratios": [3, 1]},
-        figsize=(7, 6)
-    )
+    def _compact_number_tag(value):
+        try:
+            return f"{float(value):g}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _parse_relative_uncertainty(series):
+        raw = series.astype(str).str.strip()
+        has_percent = raw.str.endswith("%")
+        vals = raw.str.replace("%", "", regex=False).astype(float)
+        # Accept either fractions (0.06), percents with %, or bare percent numbers (6).
+        vals = np.where(has_percent.to_numpy() | (np.abs(vals.to_numpy()) > 1.0),
+                        vals.to_numpy() / 100.0,
+                        vals.to_numpy())
+        return vals
+
+    def _read_mtop_scheme():
+        filename = (
+            f"mtscheme_{result_type}_{_compact_number_tag(energy)}_"
+            f"{pdfset}_{_compact_number_tag(MH)}.txt"
+        )
+        filetoread = f"{mtop_scheme_dir}/{filename}"
+        print("reading MTOP scheme results from", filetoread)
+
+        df = pd.read_csv(
+            filetoread,
+            comment="#",
+            sep=r"\s+",
+            engine="python",
+            names=["left-edge", "right-edge", "rel-down", "rel-up"],
+            header=None
+        )
+        for c in ["left-edge", "right-edge"]:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df["rel-down"] = _parse_relative_uncertainty(df["rel-down"])
+        df["rel-up"] = _parse_relative_uncertainty(df["rel-up"])
+        return df.dropna().reset_index(drop=True)
+
+    # Figure with merged panels
+    if IncludeMTOPScheme:
+        fig, (ax, ax_ratio, ax_mtop) = plt.subplots(
+            3, 1,
+            sharex=True,
+            gridspec_kw={"height_ratios": [3, 1, 1]},
+            figsize=(7, 7.2)
+        )
+    else:
+        fig, (ax, ax_ratio) = plt.subplots(
+            2, 1,
+            sharex=True,
+            gridspec_kw={"height_ratios": [3, 1]},
+            figsize=(7, 6)
+        )
+        ax_mtop = None
 
     # Only Mhh implemented here (matches your use case)
     if result_type != "Mhh":
@@ -1058,6 +1111,21 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
     ft_c   = df_ft["scale-central"].to_numpy(dtype=float)
     ft_min = df_ft["scale-min"].to_numpy(dtype=float)
     ft_max = df_ft["scale-max"].to_numpy(dtype=float)
+
+    if IncludeMTOPScheme:
+        df_mtop = _read_mtop_scheme()
+        mtop_bin_low = df_mtop["left-edge"].to_numpy(dtype=float)
+        mtop_bin_high = df_mtop["right-edge"].to_numpy(dtype=float)
+        mtop_edges = np.r_[mtop_bin_low, mtop_bin_high[-1]]
+        mtop_rel_down = df_mtop["rel-down"].to_numpy(dtype=float)
+        mtop_rel_up = df_mtop["rel-up"].to_numpy(dtype=float)
+
+        if (
+            len(mtop_bin_low) != len(ft_bin_low)
+            or not np.allclose(mtop_bin_low, ft_bin_low)
+            or not np.allclose(mtop_bin_high, ft_bin_high)
+        ):
+            print("[plot_combination] WARNING: MTOP-scheme bins differ from FTapprox bins.")
 
     # ---- EW K-factor: interpret your list as (left-edge -> value for that bin), last extends to end ----
     ew_obj = _get_ew_obj()
@@ -1159,7 +1227,10 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         _step_post(ax_ratio, hs_edges, combo, color="C4", linewidth=1.5,
                    label=r"$K_{3}\times K_{\mathrm{EW}}$")
 
-    ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+    if ax_mtop is None:
+        ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+    else:
+        ax_ratio.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     ax_ratio.set_ylabel(r"$K$", fontsize=10)
 
 
@@ -1190,6 +1261,28 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         ymin *= 0.9
         ymax *= 1.1
     ax_ratio.set_ylim(0.9 * ymin, 1.1 * ymax)
+
+    if ax_mtop is not None:
+        mtop_low = np.where(mtop_rel_down <= 0.0, 1.0 + mtop_rel_down, 1.0 - mtop_rel_down)
+        mtop_high = np.where(mtop_rel_up >= 0.0, 1.0 + mtop_rel_up, 1.0 - mtop_rel_up)
+        ax_mtop.fill_between(
+            mtop_edges,
+            np.r_[mtop_low, mtop_low[-1]],
+            np.r_[mtop_high, mtop_high[-1]],
+            step="post",
+            alpha=0.35,
+            color="lightgreen",
+            label=r"$m_t$ scheme"
+        )
+        ax_mtop.axhline(1.0, color="k", linestyle="--", linewidth=1, alpha=0.5)
+        ax_mtop.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_mtop.set_ylabel(r"$\pm m_t$ scheme", fontsize=10)
+        ax_mtop.set_xlim(xlo, xhi)
+        ax_mtop.set_ylim(0.60, 1.40)
+        ax_mtop.grid(True, which='major', alpha=0.3)
+        ax_mtop.grid(True, which='minor', alpha=0.15)
+        ax_mtop.minorticks_on()
+        ax_mtop.legend()
 
     #plt.subplots_adjust(hspace=0.0)
     #fig.tight_layout()
