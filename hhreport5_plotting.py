@@ -63,7 +63,7 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.set_xticklabels(scale_cols, rotation=45, ha="right")
         ax.set_title(
             rf"Total cross section, $\sqrt{{s}} = {energy}$ TeV, "
-            rf"{pdfset}, $m_H = {MH}$ GeV"
+            rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
         ax.minorticks_on()
@@ -167,10 +167,10 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
 
         # log y-scale, labels, title
         ax.set_yscale("log")
-        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
+        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
         ax.set_title(
             rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
-            rf"{pdfset}, $m_H = {MH}$ GeV"
+            rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
         ax.minorticks_on()
@@ -192,7 +192,7 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         # ----- RATIO PANEL -----
         ax_ratio.step(bin_centers, ratio_central, where="mid",
                       color="k")#,
-                      #label=r"$\frac{(\mathrm{d}\sigma/\mathrm{d}M_{hh})_{\mathrm{N3LON3LL}}}{(\mathrm{d}\sigma/\mathrm{d}M_{hh})_{\mathrm{NNLO}}}$")
+                      #label=r"$\frac{(\mathrm{d}\sigma/\mathrm{d}m_{hh})_{\mathrm{N3LON3LL}}}{(\mathrm{d}\sigma/\mathrm{d}m_{hh})_{\mathrm{NNLO}}}$")
 
         yvals = ratio_central.copy()
 
@@ -204,7 +204,7 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
                                   label="scale vars")
             yvals = np.concatenate([yvals, r_min, r_max])
 
-        ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_ratio.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
         ax_ratio.set_ylabel(r"$K$(N3LON3LL/NNLO)", fontsize=10)
         ax_ratio.set_xlim(bin_low[0], max_x)
         ax_ratio.grid(True, which='major', alpha=0.3)
@@ -294,7 +294,7 @@ def plot_HS_EW(HSresults, EWresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.set_xticklabels(scale_cols, rotation=45, ha="right")
         ax.set_title(
             rf"Total cross section, $\sqrt{{s}} = {energy}$ TeV, "
-            rf"{pdfset}, $m_H = {MH}$ GeV"
+            rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
         ax.minorticks_on()
@@ -398,10 +398,10 @@ def plot_HS_EW(HSresults, EWresults, K3N3LL2, result_type, energy, pdfset, MH,
 
         # log y-scale, labels, title
         ax.set_yscale("log")
-        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
+        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
         ax.set_title(
             rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
-            rf"{pdfset}, $m_H = {MH}$ GeV"
+            rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
         ax.minorticks_on()
@@ -508,7 +508,7 @@ def plot_HS_EW(HSresults, EWresults, K3N3LL2, result_type, energy, pdfset, MH,
                     yvals = np.concatenate([yvals, y_ew])
 
         # Labels, limits, legend
-        ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_ratio.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
         ax_ratio.set_ylabel(r"$K$", fontsize=10)
         ax_ratio.set_xlim(bin_low[0], max_x)
         ax_ratio.grid(True, which='major', alpha=0.3)
@@ -584,13 +584,13 @@ def plot_NNLOFTapprox(NNLO_FTapprox_results, result_type, order, energy,
 
     # Labels/titles (minimal logic; keep generic)
     if str(result_type).lower() == "mhh":
-        ax.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
-        ax.set_ylabel(r"$\mathrm{d}\sigma/\mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
+        ax.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
+        ax.set_ylabel(r"$\mathrm{d}\sigma/\mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
         ax.set_yscale("log")
         max_x = min(2000.0, float(np.nanmax(bin_high)))
         ax.set_xlim(float(np.nanmin(bin_low)), max_x)
         ax.set_ylim(0.9e-3)
-        obs_title = r"$M_{hh}$"
+        obs_title = r"$m_{hh}$"
     else:
         ax.set_xlabel(r"$X$ [GeV]", fontsize=18)
         ax.set_ylabel(r"$\mathrm{d}\sigma/\mathrm{d}X$ [fb / GeV]", fontsize=18)
@@ -678,7 +678,7 @@ def plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2
         ax.set_ylabel(r"$\sigma$ [pb]")
         ax.set_xticks(x)
         ax.set_xticklabels(scale_cols, rotation=45, ha="right")
-        ax.set_title(rf"Total cross section, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_H = {MH}$ GeV")
+        ax.set_title(rf"Total cross section, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
         ax.legend()
         ax.minorticks_on()
         ax.grid(True, which='major', alpha=0.3)
@@ -770,8 +770,8 @@ def plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2
                     label=f"{ft_order} FTapprox (central)")
 
         ax.set_yscale("log")
-        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
-        ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_H = {MH}$ GeV")
+        ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
+        ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
         ax.legend()
         ax.minorticks_on()
         ax.grid(True, which='major', alpha=0.3)
@@ -844,7 +844,7 @@ def plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2
                                   label=r"$K_{\mathrm{EW}}$")
                     yvals = np.concatenate([yvals, ew_k_on_bins[i0:i1 + 1]])
 
-        ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_ratio.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
         ax_ratio.set_ylabel(r"$K$", fontsize=10)
         ax_ratio.set_xlim(bin_low[0], max_x)
         ax_ratio.grid(True, which='major', alpha=0.3)
@@ -1200,8 +1200,8 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
     if ylog is True:
         ax.set_yscale("log")
     
-    ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}M_{hh}$ [fb / GeV]", fontsize=18)
-    ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_H = {MH}$ GeV")
+    ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
+    ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
     ax.legend()
     ax.minorticks_on()
     ax.grid(True, which='major', alpha=0.3)
@@ -1228,7 +1228,7 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                    label=r"$K_{3}\times K_{\mathrm{EW}}$")
 
     if ax_mtop is None:
-        ax_ratio.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_ratio.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
     else:
         ax_ratio.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     ax_ratio.set_ylabel(r"$K$", fontsize=10)
@@ -1275,7 +1275,7 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
             label=r"$m_t$ scheme"
         )
         ax_mtop.axhline(1.0, color="k", linestyle="--", linewidth=1, alpha=0.5)
-        ax_mtop.set_xlabel(r"$M_{hh}$ [GeV]", fontsize=18)
+        ax_mtop.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
         ax_mtop.set_ylabel(r"$\pm m_t$ scheme", fontsize=10)
         ax_mtop.set_xlim(xlo, xhi)
         ax_mtop.set_ylim(0.60, 1.40)
