@@ -341,17 +341,17 @@ plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                             'Mhh', 13, 'PDF4LHC21_40', 125,
                             envelope=True, points=True,
                             ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True,
-                            IncludeMTOPScheme=True)
+                            IncludeScaleUncertainty=True, IncludeMTOPScheme=False)
 
 plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                             'Mhh', 13.6, 'PDF4LHC21_40', 125,
                             envelope=True, points=True,
                             ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True,
-                            IncludeMTOPScheme=True)
+                            IncludeScaleUncertainty=True, IncludeMTOPScheme=False)
 
 
 plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                             'Mhh', 14, 'PDF4LHC21_40', 125,
                             envelope=True, points=True,
                             ft_order="NNLO", xmax=1500, ylog=False, include_unrescaled_FTapprox=True,
-                            IncludeMTOPScheme=True)
+                            IncludeScaleUncertainty=True, IncludeMTOPScheme=False)

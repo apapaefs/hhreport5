@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from pathlib import Path
 
 # plot Hua-Sheng's results:
 # envelope: whether to include an envelope
@@ -169,7 +170,7 @@ def plot_HS(HSresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.set_yscale("log")
         ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
         ax.set_title(
-            rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
+            rf"$m_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
             rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
@@ -400,7 +401,7 @@ def plot_HS_EW(HSresults, EWresults, K3N3LL2, result_type, energy, pdfset, MH,
         ax.set_yscale("log")
         ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
         ax.set_title(
-            rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
+            rf"$m_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, "
             rf"{pdfset}, $m_h = {MH}$ GeV"
         )
         ax.legend()
@@ -771,7 +772,7 @@ def plot_HS_EW_NNLOFTapprox(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2
 
         ax.set_yscale("log")
         ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
-        ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
+        ax.set_title(rf"$m_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
         ax.legend()
         ax.minorticks_on()
         ax.grid(True, which='major', alpha=0.3)
@@ -876,6 +877,7 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
                      include_N3LON3LL=False,
                      include_unrescaled_FTapprox=False,
                      include_kfactor_combo=True,
+                     IncludeScaleUncertainty=False,
                      IncludeMTOPScheme=False,
                      mtop_scheme_dir="mtscheme",
                      xmin=None, xmax=None, ylog=True):
@@ -889,6 +891,9 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         * plot K3 (central only), K_EW (central only), and optionally K3*K_EW (central only)
         * NO K3 scale envelope in lower panel
         * call K_QCD "K3" everywhere
+    - Optional scale-uncertainty panel:
+        * if IncludeScaleUncertainty=True, plot FTapprox scale variations divided by central
+        * red band centered around 1
     - Optional MTOP-scheme panel:
         * if IncludeMTOPScheme=True, read mtscheme/mtscheme_<obs>_<energy>_<pdfset>_<MH>.txt
         * expected columns: left-edge right-edge rel-down rel-up (percent strings accepted)
@@ -1033,11 +1038,36 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         return vals
 
     def _read_mtop_scheme():
+        mtop_dir = Path(mtop_scheme_dir)
+        real_files = sorted(mtop_dir.glob("nlo_ggxy_mt173*.dat"))
+        if real_files:
+            filetoread = real_files[0]
+            print("reading MTOP scheme results from", filetoread)
+
+            df_real = pd.read_csv(
+                filetoread,
+                comment="#",
+                sep=",",
+                engine="python",
+                header=None,
+                names=[
+                    "left-edge", "bin-mid", "right-edge",
+                    "OS", "mtmt", "mhh", "mhh/4", "min", "max",
+                    "rel-down", "rel-up"
+                ],
+            )
+            df = df_real[["left-edge", "right-edge", "rel-down", "rel-up"]].copy()
+            for c in ["left-edge", "right-edge", "rel-down", "rel-up"]:
+                df[c] = pd.to_numeric(df[c], errors="coerce")
+            df["rel-down"] = df["rel-down"] / 100.0
+            df["rel-up"] = df["rel-up"] / 100.0
+            return df.dropna().reset_index(drop=True)
+
         filename = (
             f"mtscheme_{result_type}_{_compact_number_tag(energy)}_"
             f"{pdfset}_{_compact_number_tag(MH)}.txt"
         )
-        filetoread = f"{mtop_scheme_dir}/{filename}"
+        filetoread = mtop_dir / filename
         print("reading MTOP scheme results from", filetoread)
 
         df = pd.read_csv(
@@ -1055,20 +1085,25 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         return df.dropna().reset_index(drop=True)
 
     # Figure with merged panels
-    if IncludeMTOPScheme:
-        fig, (ax, ax_ratio, ax_mtop) = plt.subplots(
-            3, 1,
-            sharex=True,
-            gridspec_kw={"height_ratios": [3, 1, 1]},
-            figsize=(7, 7.2)
-        )
+    optional_panel_count = int(IncludeScaleUncertainty) + int(IncludeMTOPScheme)
+    fig, axes = plt.subplots(
+        2 + optional_panel_count, 1,
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1] + [1] * optional_panel_count},
+        figsize=(7, 6 + 1.2 * optional_panel_count)
+    )
+    axes = np.atleast_1d(axes)
+    ax = axes[0]
+    ax_ratio = axes[1]
+    next_panel = 2
+    if IncludeScaleUncertainty:
+        ax_scale = axes[next_panel]
+        next_panel += 1
     else:
-        fig, (ax, ax_ratio) = plt.subplots(
-            2, 1,
-            sharex=True,
-            gridspec_kw={"height_ratios": [3, 1]},
-            figsize=(7, 6)
-        )
+        ax_scale = None
+    if IncludeMTOPScheme:
+        ax_mtop = axes[next_panel]
+    else:
         ax_mtop = None
 
     # Only Mhh implemented here (matches your use case)
@@ -1112,6 +1147,15 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
     ft_min = df_ft["scale-min"].to_numpy(dtype=float)
     ft_max = df_ft["scale-max"].to_numpy(dtype=float)
 
+    if IncludeScaleUncertainty:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            scale_ratio_min = ft_min / ft_c
+            scale_ratio_max = ft_max / ft_c
+        scale_band_low = np.minimum(scale_ratio_min, scale_ratio_max)
+        scale_band_high = np.maximum(scale_ratio_min, scale_ratio_max)
+        scale_band_low = np.minimum(scale_band_low, 1.0)
+        scale_band_high = np.maximum(scale_band_high, 1.0)
+
     if IncludeMTOPScheme:
         df_mtop = _read_mtop_scheme()
         mtop_bin_low = df_mtop["left-edge"].to_numpy(dtype=float)
@@ -1119,6 +1163,15 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         mtop_edges = np.r_[mtop_bin_low, mtop_bin_high[-1]]
         mtop_rel_down = df_mtop["rel-down"].to_numpy(dtype=float)
         mtop_rel_up = df_mtop["rel-up"].to_numpy(dtype=float)
+
+        if (
+            len(mtop_bin_low) == len(ft_bin_low)
+            and np.allclose(mtop_bin_low, ft_bin_low)
+            and np.allclose(mtop_bin_high[:-1], ft_bin_high[:-1])
+            and not np.allclose(mtop_bin_high[-1], ft_bin_high[-1])
+        ):
+            mtop_bin_high[-1] = ft_bin_high[-1]
+            mtop_edges = np.r_[mtop_bin_low, mtop_bin_high[-1]]
 
         if (
             len(mtop_bin_low) != len(ft_bin_low)
@@ -1201,7 +1254,7 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         ax.set_yscale("log")
     
     ax.set_ylabel(r"$\mathrm{d}\sigma / \mathrm{d}m_{hh}$ [fb / GeV]", fontsize=18)
-    ax.set_title(rf"$M_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
+    ax.set_title(rf"$m_{{hh}}$ distribution, $\sqrt{{s}} = {energy}$ TeV, {pdfset}, $m_h = {MH}$ GeV")
     ax.legend()
     ax.minorticks_on()
     ax.grid(True, which='major', alpha=0.3)
@@ -1227,10 +1280,6 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         _step_post(ax_ratio, hs_edges, combo, color="C4", linewidth=1.5,
                    label=r"$K_{3}\times K_{\mathrm{EW}}$")
 
-    if ax_mtop is None:
-        ax_ratio.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
-    else:
-        ax_ratio.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     ax_ratio.set_ylabel(r"$K$", fontsize=10)
 
 
@@ -1262,6 +1311,35 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
         ymax *= 1.1
     ax_ratio.set_ylim(0.9 * ymin, 1.1 * ymax)
 
+    if ax_scale is not None:
+        valid_scale = np.isfinite(scale_band_low) & np.isfinite(scale_band_high)
+        if np.any(valid_scale):
+            ax_scale.fill_between(
+                ft_edges,
+                np.r_[scale_band_low, scale_band_low[-1]],
+                np.r_[scale_band_high, scale_band_high[-1]],
+                step="post",
+                alpha=0.25,
+                color="red",
+                label="scale vars"
+            )
+        ax_scale.axhline(1.0, color="k", linestyle="--", linewidth=1, alpha=0.5)
+        ax_scale.set_ylabel("scale / central", fontsize=10)
+        ax_scale.set_xlim(xlo, xhi)
+        scale_yvals = np.concatenate([
+            scale_band_low[np.isfinite(scale_band_low)],
+            scale_band_high[np.isfinite(scale_band_high)],
+            np.array([1.0])
+        ])
+        scale_ymin = float(np.nanmin(scale_yvals))
+        scale_ymax = float(np.nanmax(scale_yvals))
+        scale_pad = 0.10 * (scale_ymax - scale_ymin) if scale_ymax > scale_ymin else 0.05
+        ax_scale.set_ylim(scale_ymin - scale_pad, scale_ymax + scale_pad)
+        ax_scale.grid(True, which='major', alpha=0.3)
+        ax_scale.grid(True, which='minor', alpha=0.15)
+        ax_scale.minorticks_on()
+        ax_scale.legend()
+
     if ax_mtop is not None:
         mtop_low = np.where(mtop_rel_down <= 0.0, 1.0 + mtop_rel_down, 1.0 - mtop_rel_down)
         mtop_high = np.where(mtop_rel_up >= 0.0, 1.0 + mtop_rel_up, 1.0 - mtop_rel_up)
@@ -1275,14 +1353,23 @@ def plot_combination(HSresults, EWresults, NNLO_FTapprox_results, K3N3LL2,
             label=r"$m_t$ scheme"
         )
         ax_mtop.axhline(1.0, color="k", linestyle="--", linewidth=1, alpha=0.5)
-        ax_mtop.set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
-        ax_mtop.set_ylabel(r"$\pm m_t$ scheme", fontsize=10)
+        ax_mtop.set_ylabel(r"$m_t$ scheme / nom.", fontsize=9)
         ax_mtop.set_xlim(xlo, xhi)
-        ax_mtop.set_ylim(0.60, 1.40)
+        ax_mtop.set_ylim(min(0.60, 1.05 * np.nanmin(mtop_low)),
+                         max(1.40, 1.05 * np.nanmax(mtop_high)))
         ax_mtop.grid(True, which='major', alpha=0.3)
         ax_mtop.grid(True, which='minor', alpha=0.15)
         ax_mtop.minorticks_on()
         ax_mtop.legend()
+
+    lower_axes = [ax_ratio]
+    if ax_scale is not None:
+        lower_axes.append(ax_scale)
+    if ax_mtop is not None:
+        lower_axes.append(ax_mtop)
+    for lower_ax in lower_axes[:-1]:
+        lower_ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    lower_axes[-1].set_xlabel(r"$m_{hh}$ [GeV]", fontsize=18)
 
     #plt.subplots_adjust(hspace=0.0)
     #fig.tight_layout()
